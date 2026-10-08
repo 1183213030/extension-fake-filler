@@ -4,7 +4,8 @@
  */
 
 import { MockGenerator } from '../utils/mock-data.js';
-import { detectFieldType, extractElementContext } from './form-detector.js';
+import { detectFieldType, extractElementContext, extractFieldContext } from './form-detector.js';
+import { ScenarioEngine } from '../generators/index.js';
 
 /**
  * 现代前端框架穿透设值
@@ -49,9 +50,10 @@ function applyHighlightEffect(element) {
  * 为单个元素生成并填充数据
  * @param {HTMLElement} element 
  * @param {string} [specifiedType] 显式指定类型，如不提供则自动智能推断
+ * @param {string} [scenario='NORMAL'] 测试场景类型 (NORMAL|BOUNDARY|ABNORMAL|CONCURRENCY|COMPATIBILITY)
  * @returns {boolean} 是否填充成功
  */
-export function fillSingleElement(element, specifiedType) {
+export function fillSingleElement(element, specifiedType, scenario = 'NORMAL') {
   if (!element || element.disabled || element.readOnly) {
     return false;
   }
@@ -114,101 +116,120 @@ export function fillSingleElement(element, specifiedType) {
     return false;
   }
 
+  // 提取输入控件结构化上下文
+  const fieldContext = extractFieldContext(element);
+
   // 推断或使用指定的数据类型
   const fieldType = specifiedType || detectFieldType(element);
+  if (fieldType === 'projectProperty') {
+    return false;
+  }
+
   let fakeValue = '';
 
-  switch (fieldType) {
-    case 'name':
-      fakeValue = MockGenerator.name();
-      break;
-    case 'phone':
-      fakeValue = MockGenerator.phone();
-      break;
-    case 'idCard':
-      fakeValue = MockGenerator.idCard();
-      break;
-    case 'usci':
-      fakeValue = MockGenerator.usci();
-      break;
-    case 'bankCard':
-      fakeValue = MockGenerator.bankCard();
-      break;
-    case 'email':
-      fakeValue = MockGenerator.email();
-      break;
-    case 'amount':
-      fakeValue = MockGenerator.amount();
-      break;
-    case 'amountWan':
-      fakeValue = MockGenerator.amount({ min: 10, max: 150, decimals: 2 });
-      break;
-    case 'procureContent':
-      fakeValue = MockGenerator.procureContent();
-      break;
-    case 'procureRemark':
-      fakeValue = MockGenerator.procureRemark();
-      break;
-    case 'indicatorName':
-      fakeValue = MockGenerator.indicatorName();
-      break;
-    case 'indicatorUnit':
-      fakeValue = MockGenerator.indicatorUnit();
-      break;
-    case 'indicatorValue':
-      fakeValue = MockGenerator.indicatorValue();
-      break;
-    case 'weight':
-      fakeValue = '15';
-      break;
-    case 'calcSymbol':
-      fakeValue = MockGenerator.calcSymbol();
-      break;
-    case 'projectProperty':
-      // 用户要求：非真实弹窗数据抓取时不乱填写死字典，保持空白留给用户手动弹窗选择
-      return false;
-    case 'department':
-      fakeValue = MockGenerator.department();
-      break;
-    case 'projectLeader':
-      fakeValue = MockGenerator.projectLeader();
-      break;
-    case 'projectName':
-      fakeValue = MockGenerator.projectName();
-      break;
-    case 'projectReason':
-      fakeValue = MockGenerator.projectReason();
-      break;
-    case 'projectContent':
-      fakeValue = MockGenerator.projectContent();
-      break;
-    case 'budgetReason':
-      fakeValue = MockGenerator.budgetReason();
-      break;
-    case 'companyName':
-      fakeValue = MockGenerator.companyName();
-      break;
-    case 'address':
-      fakeValue = MockGenerator.address();
-      break;
-    case 'date':
-      fakeValue = MockGenerator.date();
-      break;
-    case 'dateTime':
-      fakeValue = MockGenerator.dateTime();
-      break;
-    case 'password':
-      fakeValue = MockGenerator.password();
-      break;
-    case 'zipCode':
-      fakeValue = MockGenerator.zipCode();
-      break;
-    case 'remark':
-      fakeValue = MockGenerator.remark();
-      break;
-    default:
-      fakeValue = MockGenerator.procureContent();
-      break;
+  // 场景驱动矩阵引擎调度 (当启用 BOUNDARY / ABNORMAL / CONCURRENCY / COMPATIBILITY 时全场景接管)
+  if (scenario && scenario !== 'NORMAL' && typeof ScenarioEngine !== 'undefined') {
+    const result = ScenarioEngine.generate(fieldType, scenario, fieldContext);
+    fakeValue = result && result.value !== undefined ? result.value : '';
+  } else {
+    // 正常场景 (NORMAL)
+    switch (fieldType) {
+      case 'name':
+        fakeValue = MockGenerator.name();
+        break;
+      case 'phone':
+        fakeValue = typeof ScenarioEngine !== 'undefined'
+          ? ScenarioEngine.generate('phone', 'NORMAL', fieldContext).value
+          : MockGenerator.phone();
+        break;
+      case 'idCard':
+        fakeValue = typeof ScenarioEngine !== 'undefined'
+          ? ScenarioEngine.generate('idCard', 'NORMAL', fieldContext).value
+          : MockGenerator.idCard();
+        break;
+      case 'usci':
+        fakeValue = typeof ScenarioEngine !== 'undefined'
+          ? ScenarioEngine.generate('usci', 'NORMAL', fieldContext).value
+          : MockGenerator.usci();
+        break;
+      case 'bankCard':
+        fakeValue = MockGenerator.bankCard();
+        break;
+      case 'email':
+        fakeValue = MockGenerator.email();
+        break;
+      case 'amount':
+        fakeValue = MockGenerator.amount();
+        break;
+      case 'amountWan':
+        fakeValue = MockGenerator.amount({ min: 10, max: 150, decimals: 2 });
+        break;
+      case 'procureContent':
+        fakeValue = MockGenerator.procureContent();
+        break;
+      case 'procureRemark':
+        fakeValue = MockGenerator.procureRemark();
+        break;
+      case 'indicatorName':
+        fakeValue = MockGenerator.indicatorName();
+        break;
+      case 'indicatorUnit':
+        fakeValue = MockGenerator.indicatorUnit();
+        break;
+      case 'indicatorValue':
+        fakeValue = MockGenerator.indicatorValue();
+        break;
+      case 'weight':
+        fakeValue = '15';
+        break;
+      case 'calcSymbol':
+        fakeValue = MockGenerator.calcSymbol();
+        break;
+      case 'projectProperty':
+        return false;
+      case 'department':
+        fakeValue = MockGenerator.department();
+        break;
+      case 'projectLeader':
+        fakeValue = MockGenerator.projectLeader();
+        break;
+      case 'projectName':
+        fakeValue = MockGenerator.projectName();
+        break;
+      case 'projectReason':
+        fakeValue = MockGenerator.projectReason();
+        break;
+      case 'projectContent':
+        fakeValue = MockGenerator.projectContent();
+        break;
+      case 'budgetReason':
+        fakeValue = MockGenerator.budgetReason();
+        break;
+      case 'companyName':
+        fakeValue = MockGenerator.companyName();
+        break;
+      case 'address':
+        fakeValue = MockGenerator.address();
+        break;
+      case 'date':
+        fakeValue = MockGenerator.date();
+        break;
+      case 'dateTime':
+        fakeValue = MockGenerator.dateTime();
+        break;
+      case 'password':
+        fakeValue = MockGenerator.password();
+        break;
+      case 'zipCode':
+        fakeValue = MockGenerator.zipCode();
+        break;
+      case 'remark':
+        fakeValue = MockGenerator.remark();
+        break;
+      default:
+        fakeValue = MockGenerator.procureContent();
+        break;
+    }
   }
 
   setNativeValue(element, fakeValue);
@@ -307,18 +328,19 @@ export function silentlyFillSelects(container = document, onlyEmpty = false) {
 
 /**
  * 批量填充容器内的所有可用表单字段
- * 包含：权重总和恒等于100分配算法、Element UI 下拉框值静默随机选择、业务字段精准映射
+ * 包含：权重分配算法、Element UI 下拉框值静默随机选择、场景化矩阵分发
  * @param {HTMLElement|Document} [container=document] 
  * @param {Object} [options]
  * @param {boolean} [options.onlyEmpty=false] 仅填充当前为空的输入项
+ * @param {string} [options.scenario='NORMAL'] 测试场景类型 (NORMAL|BOUNDARY|ABNORMAL|CONCURRENCY|COMPATIBILITY)
  * @returns {number} 成功填充的字段数量
  */
 export function fillAllFormElements(container = document, options = {}) {
-  const { onlyEmpty = false } = options;
+  const { onlyEmpty = false, scenario = 'NORMAL' } = options;
   let filledCount = 0;
   const handledSet = new Set();
 
-  // 1. 优先协同处理所有“权重(%)”输入框，严格保障所有行权重合计为 100
+  // 1. 优先协同处理所有“权重(%)”输入框
   const allInputs = Array.from(container.querySelectorAll('input:not([disabled])'));
   const weightInputs = allInputs.filter(input => {
     if (input.readOnly) return false;
@@ -331,7 +353,25 @@ export function fillAllFormElements(container = document, options = {}) {
   });
 
   if (weightInputs.length > 0) {
-    const weights = MockGenerator.generateWeights(weightInputs.length);
+    let weights = [];
+    if (scenario === 'NORMAL') {
+      weights = MockGenerator.generateWeights(weightInputs.length);
+    } else if (scenario === 'BOUNDARY') {
+      // 边界值测试：第一项占 100，其余全为 0
+      weights = weightInputs.map((_, idx) => (idx === 0 ? '100' : '0'));
+    } else if (scenario === 'ABNORMAL') {
+      // 异常值测试：超限 150 或负数 -10
+      weights = weightInputs.map((_, idx) => (idx === 0 ? '150' : '-10'));
+    } else if (scenario === 'CONCURRENCY') {
+      // 并发冲突测试：固定权重 50
+      weights = weightInputs.map(() => '50');
+    } else if (scenario === 'COMPATIBILITY') {
+      // 兼容性测试：带百分号格式串
+      weights = weightInputs.map(() => '100.00%');
+    } else {
+      weights = MockGenerator.generateWeights(weightInputs.length);
+    }
+
     weightInputs.forEach((input, idx) => {
       if (onlyEmpty && (input.value || '').trim() !== '') {
         return;
@@ -360,7 +400,7 @@ export function fillAllFormElements(container = document, options = {}) {
       }
     }
 
-    const ok = fillSingleElement(el);
+    const ok = fillSingleElement(el, null, scenario);
     if (ok) {
       handledSet.add(el);
       filledCount++;

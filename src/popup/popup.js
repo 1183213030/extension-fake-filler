@@ -3,7 +3,18 @@
  */
 
 import { MockGenerator } from '../utils/mock-data.js';
-import { LucideIcons, getLucideIcon } from '../utils/lucide-icons.js';
+import { getLucideIcon } from '../utils/lucide-icons.js';
+import { ScenarioEngine } from '../generators/index.js';
+
+let currentScenario = 'NORMAL';
+
+const SCENARIO_LABELS = {
+  NORMAL: 'NORMAL · 正常',
+  BOUNDARY: 'BOUNDARY · 边界值',
+  ABNORMAL: 'ABNORMAL · 异常',
+  CONCURRENCY: 'CONCURRENCY · 并发',
+  COMPATIBILITY: 'COMPATIBILITY · 兼容性'
+};
 
 // 数据卡片配置清单
 const DATA_CARD_CONFIGS = [
@@ -63,6 +74,52 @@ async function copyToClipboard(text) {
   }
 }
 
+// 场景驱动选择器交互
+function setupScenarioSelector() {
+  const pills = document.querySelectorAll('.scenario-pill');
+  const tagEl = document.getElementById('active-scenario-tag');
+
+  function setActive(sc) {
+    currentScenario = sc;
+    pills.forEach(p => {
+      if (p.getAttribute('data-scenario') === sc) {
+        p.classList.add('active');
+      } else {
+        p.classList.remove('active');
+      }
+    });
+    if (tagEl) {
+      tagEl.innerText = SCENARIO_LABELS[sc] || sc;
+    }
+  }
+
+  // 读取已保存场景
+  chrome.storage.local.get({ activeScenario: 'NORMAL' }, (res) => {
+    if (res && res.activeScenario) {
+      setActive(res.activeScenario);
+    }
+  });
+
+  pills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      const sc = pill.getAttribute('data-scenario');
+      setActive(sc);
+      chrome.storage.local.set({ activeScenario: sc });
+      showToast(`已切换至：${SCENARIO_LABELS[sc]}`);
+
+      // 实时向当前标签页发送场景变更通知
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs.length > 0 && tabs[0].id) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'SET_SCENARIO',
+            payload: { scenario: sc }
+          }).catch(() => {});
+        }
+      });
+    });
+  });
+}
+
 // 渲染常用数据卡片
 function renderDataCards() {
   const container = document.getElementById('data-cards-grid');
@@ -100,8 +157,6 @@ function renderDataCards() {
   // 绑定卡片上的刷新与复制事件
   container.addEventListener('click', (e) => {
     const refreshBtn = e.target.closest('.btn-refresh');
-    const copyBtn = e.target.closest('.btn-copy');
-
     if (refreshBtn) {
       const id = refreshBtn.getAttribute('data-id');
       const cfg = DATA_CARD_CONFIGS.find(c => c.id === id);
@@ -112,10 +167,13 @@ function renderDataCards() {
         if (valEl) {
           valEl.innerText = newVal;
           valEl.title = newVal;
+          valEl.classList.add('flash');
+          setTimeout(() => valEl.classList.remove('flash'), 400);
         }
       }
     }
 
+    const copyBtn = e.target.closest('.btn-copy');
     if (copyBtn) {
       const id = copyBtn.getAttribute('data-id');
       const val = cardStateMap.get(id);
@@ -144,7 +202,7 @@ async function ensureContentScriptInjected(tabId) {
   }
 }
 
-// 向当前激活的标签页发送指令
+// 向当前激活的标签页发送指令 (携带当前选中的测试场景)
 async function sendTabAction(action) {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -161,22 +219,24 @@ async function sendTabAction(action) {
     }
 
     let res;
+    const payload = { scenario: currentScenario };
     try {
-      res = await chrome.tabs.sendMessage(tab.id, { action });
+      res = await chrome.tabs.sendMessage(tab.id, { action, payload });
     } catch (msgErr) {
       // 首次通信失败，说明是扩展安装前已打开的旧页面，自动执行动态热注入
       const ok = await ensureContentScriptInjected(tab.id);
       if (ok) {
         await new Promise(resolve => setTimeout(resolve, 80));
-        res = await chrome.tabs.sendMessage(tab.id, { action });
+        res = await chrome.tabs.sendMessage(tab.id, { action, payload });
       } else {
         throw msgErr;
       }
     }
 
     if (res && res.success) {
-      if (action === 'FILL_ALL') showToast(`已填充 ${res.count} 个表单项`);
-      if (action === 'FILL_EMPTY') showToast(`已填充 ${res.count} 个空白项`);
+      const tag = SCENARIO_LABELS[res.scenario || currentScenario] || '';
+      if (action === 'FILL_ALL') showToast(`[${tag}] 已填充 ${res.count} 个字段`);
+      if (action === 'FILL_EMPTY') showToast(`[${tag}] 已填充 ${res.count} 个空白项`);
       if (action === 'CLEAR_ALL') showToast(`已清空 ${res.count} 个表单项`);
     } else {
       showToast('未检测到可编辑字段');
@@ -203,7 +263,7 @@ function setupTabs() {
   });
 }
 
-// 批量生成模块事件
+// 批量生成模块事件 (支持按场景生成)
 function setupBatchGenerator() {
   const typeSelect = document.getElementById('batch-type-select');
   const countInput = document.getElementById('batch-count-input');
@@ -232,11 +292,16 @@ function setupBatchGenerator() {
 
     const list = [];
     for (let i = 0; i < count; i++) {
-      list.push(cfg.gen());
+      if (currentScenario !== 'NORMAL') {
+        const item = ScenarioEngine.generate(type, currentScenario);
+        list.push(item.value);
+      } else {
+        list.push(cfg.gen());
+      }
     }
 
     previewTextarea.value = list.join('\n');
-    countLabel.innerText = `${list.length} 项`;
+    countLabel.innerText = `${list.length} 项 (${currentScenario})`;
     copyBatchBtn.disabled = false;
   });
 
@@ -298,6 +363,7 @@ function setupSettings() {
 // 初始化总入口
 document.addEventListener('DOMContentLoaded', () => {
   initIcons();
+  setupScenarioSelector();
   renderDataCards();
   setupTabs();
   setupBatchGenerator();

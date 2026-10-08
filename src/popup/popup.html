@@ -23,6 +23,21 @@
       </div>
     </header>
 
+    <!-- 场景驱动矩阵模式选择器 -->
+    <section class="scenario-selector-section">
+      <div class="scenario-header">
+        <span class="scenario-title">测试场景矩阵</span>
+        <span class="scenario-active-tag" id="active-scenario-tag">NORMAL · 正常</span>
+      </div>
+      <div class="scenario-pill-group" id="scenario-pill-group">
+        <button class="scenario-pill active" data-scenario="NORMAL" title="正常合规业务数据">正常</button>
+        <button class="scenario-pill" data-scenario="BOUNDARY" title="边界极值、临界长度、闰年等">边界值</button>
+        <button class="scenario-pill" data-scenario="ABNORMAL" title="校验码错误、非法字符、XSS/SQL注入">异常</button>
+        <button class="scenario-pill" data-scenario="CONCURRENCY" title="固定预留标识、唯一索引冲突测试">并发</button>
+        <button class="scenario-pill" data-scenario="COMPATIBILITY" title="小写校验、全半角、生僻字兼容">兼容性</button>
+      </div>
+    </section>
+
     <!-- 快捷页面操作区 -->
     <section class="quick-action-section">
       <button class="action-btn primary" id="btn-page-fill-all">

@@ -313,3 +313,63 @@ export function detectFieldType(element) {
   // 最终兜底：常规业务测试说明，绝非人名
   return 'procureContent';
 }
+
+/**
+ * 提取输入控件结构化上下文信息 (包含属性约束与关联标签)
+ * @param {HTMLElement} element 
+ * @returns {Object} 结构化上下文
+ */
+export function extractFieldContext(element) {
+  if (!element) return {};
+  const tagName = (element.tagName || '').toLowerCase();
+  const type = (element.getAttribute('type') || (tagName === 'textarea' ? 'textarea' : 'text')).toLowerCase();
+  const name = element.getAttribute('name') || '';
+  const id = element.getAttribute('id') || '';
+  const placeholder = element.getAttribute('placeholder') || '';
+  const prop = element.getAttribute('data-prop') || element.getAttribute('v-model') || '';
+
+  const maxLenAttr = element.getAttribute('maxlength') || element.getAttribute('max-length');
+  const minLenAttr = element.getAttribute('minlength') || element.getAttribute('min-length');
+  const minAttr = element.getAttribute('min');
+  const maxAttr = element.getAttribute('max');
+  const pattern = element.getAttribute('pattern') || '';
+  const required = element.hasAttribute('required') || element.getAttribute('aria-required') === 'true';
+  const step = element.getAttribute('step') || '';
+
+  const maxLength = maxLenAttr && !isNaN(parseInt(maxLenAttr, 10)) ? parseInt(maxLenAttr, 10) : undefined;
+  const minLength = minLenAttr && !isNaN(parseInt(minLenAttr, 10)) ? parseInt(minLenAttr, 10) : undefined;
+  const min = minAttr !== null && minAttr !== undefined && !isNaN(Number(minAttr)) ? Number(minAttr) : undefined;
+  const max = maxAttr !== null && maxAttr !== undefined && !isNaN(Number(maxAttr)) ? Number(maxAttr) : undefined;
+
+  let labelText = '';
+  if (id) {
+    try {
+      const lbl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      if (lbl && lbl.innerText) labelText = lbl.innerText.trim();
+    } catch (e) {}
+  }
+  if (!labelText && typeof element.closest === 'function') {
+    const parentFormItem = element.closest('.el-form-item, .ant-form-item');
+    if (parentFormItem) {
+      const lbl = parentFormItem.querySelector('.el-form-item__label, .ant-form-item-label');
+      if (lbl && lbl.innerText) labelText = lbl.innerText.trim();
+    }
+  }
+
+  return {
+    tagName,
+    type,
+    name,
+    id,
+    placeholder,
+    prop,
+    maxLength,
+    minLength,
+    min,
+    max,
+    pattern,
+    required,
+    step,
+    label: labelText
+  };
+}

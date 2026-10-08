@@ -4,6 +4,11 @@
   "description": "Chrome and Edge extension for generating test data and auto-filling forms",
   "type": "module",
   "scripts": {
-    "test": "node test/run-tests.js"
+    "test": "node test/run-tests.js",
+    "test:scenario": "node node_modules/typescript/lib/tsc.js -p tsconfig.test.json && node test/test-scenario-matrix.js",
+    "typecheck": "node node_modules/typescript/lib/tsc.js --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

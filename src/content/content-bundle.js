@@ -1,6 +1,6 @@
 /**
  * FakeCraft Content Script 自包含独立运行时 (100% 免疫 CSP 与模块加载延迟)
- * 自动生成于: 2026-10-08T02:36:20.190Z
+ * 自动生成于: 2026-10-08T06:25:54.185Z
  */
 (() => {
   // 避免重复注入
@@ -846,6 +846,901 @@ function getLucideIcon(name, size = 16, className = '') {
 
 
   /**
+ * 场景策略抽象基类
+ * 提供公共的调度分发、随机选取与辅助工具方法
+ */
+class BaseScenarioStrategy {
+    /**
+     * 调度总入口
+     */
+    generate(scenario, context) {
+        switch (scenario) {
+            case 'NORMAL':
+                return this.generateNormal(context);
+            case 'BOUNDARY':
+                return this.generateBoundary(context);
+            case 'ABNORMAL':
+                return this.generateAbnormal(context);
+            case 'CONCURRENCY':
+                return this.generateConcurrency(context);
+            case 'COMPATIBILITY':
+                return this.generateCompatibility(context);
+            default:
+                return this.generateNormal(context);
+        }
+    }
+    /**
+     * 默认支持全部 5 种场景
+     */
+    getSupportedScenarios() {
+        return ['NORMAL', 'BOUNDARY', 'ABNORMAL', 'CONCURRENCY', 'COMPATIBILITY'];
+    }
+    /**
+     * 辅助工具：从数组中随机挑选一项
+     */
+    pickRandom(list) {
+        if (!list || list.length === 0) {
+            throw new Error('PickRandom list must not be empty');
+        }
+        const index = Math.floor(Math.random() * list.length);
+        return list[index];
+    }
+    /**
+     * 辅助工具：随机指定位数的数字串
+     */
+    randomDigits(length) {
+        let result = '';
+        for (let i = 0; i < length; i++) {
+            result += Math.floor(Math.random() * 10).toString();
+        }
+        return result;
+    }
+    /**
+     * 辅助工具：构建标准返回结构
+     */
+    createResult(value, scenario, description, metadata) {
+        return {
+            value,
+            scenario,
+            description,
+            metadata: metadata || {}
+        };
+    }
+}
+
+
+  /**
+ * 中国居民身份证场景策略 (GB 11643-1999)
+ */
+
+
+class IdCardStrategy extends BaseScenarioStrategy {
+    constructor() {
+        super(...arguments);
+        Object.defineProperty(this, "fieldType", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: IdCardStrategy.FIELD_TYPE
+        });
+        Object.defineProperty(this, "name", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: '居民身份证号 (GB 11643-1999)'
+        });
+    }
+    static getInstance() {
+        if (!this.instance) {
+            this.instance = new IdCardStrategy();
+        }
+        return this.instance;
+    }
+    /**
+     * NORMAL: 合规行政区划 + 合法生日 + 正确校验码
+     */
+    generateNormal(context) {
+        const region = this.pickRandom(DISTRICT_CODES);
+        const startYear = 1970;
+        const endYear = 2005;
+        const year = Math.floor(Math.random() * (endYear - startYear + 1)) + startYear;
+        const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+        const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+        const order = this.randomDigits(3);
+        const base17 = `${region}${year}${month}${day}${order}`;
+        const checkDigit = calculateCheckCode(base17);
+        const value = `${base17}${checkDigit}`;
+        return this.createResult(value, 'NORMAL', `合规身份证号：${region}区划，${year}-${month}-${day} 出生，第18位校验码[${checkDigit}]正确`, { region, birthDate: `${year}${month}${day}`, checkDigit });
+    }
+    /**
+     * BOUNDARY: 边界值
+     * - 闰年 2月29日 生日 (如 2000-02-29, 2004-02-29)
+     * - 刚满 18 周岁当天生日 (精确至今日往前推18年)
+     * - 百岁老人生日 (今日往前推100年)
+     * - 长度刚好 18 位边界
+     */
+    generateBoundary(context) {
+        const region = this.pickRandom(DISTRICT_CODES);
+        const order = this.randomDigits(3);
+        const boundaryType = this.pickRandom(['LEAP_YEAR', 'EXACT_18_YEARS', 'CENTENARIAN']);
+        const now = new Date();
+        let birthStr = '';
+        let desc = '';
+        if (boundaryType === 'LEAP_YEAR') {
+            const leapYears = [1980, 1984, 1988, 1992, 1996, 2000, 2004];
+            const y = this.pickRandom(leapYears);
+            birthStr = `${y}0229`;
+            desc = `边界值：闰年2月29日出生 (${y}-02-29)，测试系统闰日校验逻辑`;
+        }
+        else if (boundaryType === 'EXACT_18_YEARS') {
+            const targetYear = now.getFullYear() - 18;
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            birthStr = `${targetYear}${m}${d}`;
+            desc = `边界值：刚满 18 周岁当天生日 (${targetYear}-${m}-${d})，测试成年临界准入校验`;
+        }
+        else {
+            const targetYear = now.getFullYear() - 100;
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            birthStr = `${targetYear}${m}${d}`;
+            desc = `边界值：百岁老人 (${targetYear}-${m}-${d})，测试高龄区间极值与出生年份跨世纪校验`;
+        }
+        const base17 = `${region}${birthStr}${order}`;
+        const checkDigit = calculateCheckCode(base17);
+        const value = `${base17}${checkDigit}`;
+        return this.createResult(value, 'BOUNDARY', desc, {
+            boundaryType,
+            birthDate: birthStr,
+            checkDigit
+        });
+    }
+    /**
+     * ABNORMAL: 异常注入
+     * - 故意计算错误第 18 位校验码（如应为 X 填 1，或将计算出的校验位变更为错误字符）
+     * - 格式截断 17 位
+     * - 超长 19 位
+     */
+    generateAbnormal(context) {
+        const region = this.pickRandom(DISTRICT_CODES);
+        const birth = '19950520';
+        const order = this.randomDigits(3);
+        const base17 = `${region}${birth}${order}`;
+        const correctCheckDigit = calculateCheckCode(base17);
+        const errorType = this.pickRandom(['WRONG_CHECKSUM', 'TRUNCATED_17', 'OVERFLOW_19']);
+        if (errorType === 'WRONG_CHECKSUM') {
+            // 故意选择一个绝对不相等的校验字符
+            const candidates = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'X'].filter(c => c !== correctCheckDigit);
+            const wrongCheckDigit = this.pickRandom(candidates);
+            const value = `${base17}${wrongCheckDigit}`;
+            return this.createResult(value, 'ABNORMAL', `校验码异常：第18位计算应为 [${correctCheckDigit}]，故意填入错误校验码 [${wrongCheckDigit}]`, { correctCheckDigit, wrongCheckDigit });
+        }
+        else if (errorType === 'TRUNCATED_17') {
+            return this.createResult(base17, 'ABNORMAL', `格式截断：身份证号仅有 17 位（缺失末位校验码），测试前端防截断校验`, { length: 17 });
+        }
+        else {
+            const value = `${base17}${correctCheckDigit}9`;
+            return this.createResult(value, 'ABNORMAL', `格式超长：身份证号超长为 19 位（末尾多一位字符），测试最大长度限制与溢出拦截`, { length: 19 });
+        }
+    }
+    /**
+     * CONCURRENCY: 并发冲突专用（预留固定标识、模拟唯一键冲突）
+     */
+    generateConcurrency(context) {
+        const CONFLICT_ID = '110101199003072378';
+        return this.createResult(CONFLICT_ID, 'CONCURRENCY', '并发冲突样本：使用固定测试户籍身份证号，用于批量/并发请求触发数据库唯一索引冲突', { isFixed: true, targetKey: CONFLICT_ID });
+    }
+    /**
+     * COMPATIBILITY: 兼容性验证
+     * - 校验位末尾使用小写 'x'（旧系统或区分大小写正则适配测试）
+     */
+    generateCompatibility(context) {
+        const region = this.pickRandom(DISTRICT_CODES);
+        // 循环寻找一个校验码为 'X' 的前 17 位
+        let base17 = '';
+        let found = false;
+        for (let i = 0; i < 100; i++) {
+            const b = `${region}199${Math.floor(Math.random() * 10)}0${Math.floor(Math.random() * 9) + 1}15${this.randomDigits(3)}`;
+            if (calculateCheckCode(b) === 'X') {
+                base17 = b;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            base17 = '11010119900101235';
+        }
+        const value = `${base17}x`;
+        return this.createResult(value, 'COMPATIBILITY', '兼容性样本：末位校验码采用小写 [x]（标准为大写X），测试系统是否具备大小写容错与自动大写转换机制', { originalCheck: 'X', compatibilityCheck: 'x' });
+    }
+}
+Object.defineProperty(IdCardStrategy, "FIELD_TYPE", {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: 'idCard'
+});
+
+
+  /**
+ * 统一社会信用代码场景策略 (GB 32100-2015)
+ */
+
+
+class CreditCodeStrategy extends BaseScenarioStrategy {
+    constructor() {
+        super(...arguments);
+        Object.defineProperty(this, "fieldType", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: CreditCodeStrategy.FIELD_TYPE
+        });
+        Object.defineProperty(this, "name", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: '统一社会信用代码 (GB 32100-2015)'
+        });
+    }
+    static getInstance() {
+        if (!this.instance) {
+            this.instance = new CreditCodeStrategy();
+        }
+        return this.instance;
+    }
+    /**
+     * NORMAL: 合规 18 位代码
+     */
+    generateNormal(context) {
+        const value = generateUsci();
+        return this.createResult(value, 'NORMAL', `合规统一社会信用代码：18位全大写，通过国标模31加权校验`, { length: 18 });
+    }
+    /**
+     * BOUNDARY: 31 进制边界字符（含 Y, 0 等端点字符）
+     */
+    generateBoundary(context) {
+        // GB 32100-2015 字符集: '0123456789ABCDEFGHJKLMNPQRTUWXY'
+        // 字符下标: '0' 对应 0 (最小端点)，'Y' 对应 30 (最大端点)
+        const boundaryType = this.pickRandom(['MIN_ZERO', 'MAX_Y', 'MIX_EXTREMES']);
+        let orgCode = '';
+        let desc = '';
+        if (boundaryType === 'MIN_ZERO') {
+            orgCode = '000000000';
+            desc = '边界值：主体标识全为端点字符 [0] (31进制最小值0)，测试极限零值校验';
+        }
+        else if (boundaryType === 'MAX_Y') {
+            orgCode = 'YYYYYYYYY';
+            desc = '边界值：主体标识全为端点字符 [Y] (31进制最大值30)，测试极限极大字符校验';
+        }
+        else {
+            orgCode = '0Y0Y0Y0Y0';
+            desc = '边界值：主体标识交替由极限边界字符 [0] 与 [Y] 组成，测试极值交错场景';
+        }
+        const dept = '91'; // 工商企业
+        const district = '110108'; // 海淀区
+        const base17 = `${dept}${district}${orgCode}`;
+        const checkChar = calculateUsciCheckCode(base17);
+        const value = `${base17}${checkChar}`;
+        return this.createResult(value, 'BOUNDARY', desc, {
+            boundaryType,
+            base17,
+            checkChar
+        });
+    }
+    /**
+     * ABNORMAL: 异常注入
+     * - 第 18 位校验码错误
+     * - 包含明令排除的混淆非法字符 (I, O, Z, S, V)
+     */
+    generateAbnormal(context) {
+        const errorType = this.pickRandom(['FORBIDDEN_CHARS', 'WRONG_CHECKSUM', 'TRUNCATED_17']);
+        const standardUsci = generateUsci();
+        const base17 = standardUsci.slice(0, 17);
+        const correctCheck = standardUsci.slice(17);
+        if (errorType === 'FORBIDDEN_CHARS') {
+            // GB 32100-2015 规定不得使用的 5 个字符: I, O, Z, S, V
+            const forbiddenChar = this.pickRandom(['I', 'O', 'Z', 'S', 'V']);
+            // 插入到组织机构代码部分
+            const corruptedBase = base17.slice(0, 10) + forbiddenChar + base17.slice(11);
+            const value = `${corruptedBase}${correctCheck}`;
+            return this.createResult(value, 'ABNORMAL', `非法混淆字符异常：代码中包含国标明令禁用的混淆字符 [${forbiddenChar}] (国标禁止I/O/Z/S/V)，测试合规字符集过滤`, { forbiddenChar, corruptedPosition: 11 });
+        }
+        else if (errorType === 'WRONG_CHECKSUM') {
+            const chars = '0123456789ABCDEFGHJKLMNPQRTUWXY';
+            const wrongCandidates = chars.split('').filter(c => c !== correctCheck);
+            const wrongChar = this.pickRandom(wrongCandidates);
+            const value = `${base17}${wrongChar}`;
+            return this.createResult(value, 'ABNORMAL', `校验码异常：应为 [${correctCheck}]，故意填入错误校验码 [${wrongChar}]，测试模31校验拦截`, { correctCheck, wrongChar });
+        }
+        else {
+            return this.createResult(base17, 'ABNORMAL', '长度截断：信用代码仅17位（缺失末位），测试长度校验', { length: 17 });
+        }
+    }
+    /**
+     * CONCURRENCY: 固定的测试税号
+     */
+    generateConcurrency(context) {
+        const FIXED_TAX_NO = '91110108MA0000000Y';
+        return this.createResult(FIXED_TAX_NO, 'CONCURRENCY', '并发冲突样本：使用固定测试企业统一社会信用代码，用于模拟重复建档或税号唯一索引冲突', { isFixed: true, targetKey: FIXED_TAX_NO });
+    }
+    /**
+     * COMPATIBILITY: 兼容性验证
+     * - 字母全小写或混合小写（测试系统入库前是否具备 .toUpperCase() 规范化能力）
+     */
+    generateCompatibility(context) {
+        const normal = generateUsci();
+        const lowerValue = normal.toLowerCase();
+        return this.createResult(lowerValue, 'COMPATIBILITY', '兼容性样本：全部字母使用小写（如 91110108ma...），测试系统是否支持自动清洗转大写兼容', { original: normal, lowercase: lowerValue });
+    }
+}
+Object.defineProperty(CreditCodeStrategy, "FIELD_TYPE", {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: 'usci'
+});
+
+
+  /**
+ * 手机号码场景策略 (国内三大运营商及虚拟运营商号段)
+ */
+
+class MobileStrategy extends BaseScenarioStrategy {
+    constructor() {
+        super(...arguments);
+        Object.defineProperty(this, "fieldType", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: MobileStrategy.FIELD_TYPE
+        });
+        Object.defineProperty(this, "name", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: '中国手机号码 (三大运营商与虚商)'
+        });
+        // 主流传统三大运营商号段
+        Object.defineProperty(this, "STANDARD_PREFIXES", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: [
+                '134', '135', '136', '137', '138', '139', '150', '151', '152', '157', '158', '159', '182', '183', '187', '188', // 移动
+                '130', '131', '132', '155', '156', '185', '186', // 联通
+                '133', '153', '180', '181', '189' // 电信
+            ]
+        });
+        // 虚拟运营商及新兴号段
+        Object.defineProperty(this, "VIRTUAL_PREFIXES", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: [
+                '162', '165', '167', // 虚商移动/电信/联通
+                '170', '171', // 经典虚商号段
+                '192', // 中国广电 5G
+                '198', // 移动新号段
+                '199', // 电信新号段
+                '195', '196'
+            ]
+        });
+    }
+    static getInstance() {
+        if (!this.instance) {
+            this.instance = new MobileStrategy();
+        }
+        return this.instance;
+    }
+    /**
+     * NORMAL: 常见三大运营商合法 11 位手机号
+     */
+    generateNormal(context) {
+        const prefix = this.pickRandom(this.STANDARD_PREFIXES);
+        const suffix = this.randomDigits(8);
+        const value = `${prefix}${suffix}`;
+        return this.createResult(value, 'NORMAL', `合规主流手机号：${prefix} 号段 (11位标准手机号)`, { prefix, length: 11 });
+    }
+    /**
+     * BOUNDARY: 边界值
+     * - 新兴虚拟运营商及广电号段 (16x/19x/170/192)
+     * - 边界长度：10 位（少一位）与 12 位（多一位）
+     */
+    generateBoundary(context) {
+        const boundaryType = this.pickRandom(['VIRTUAL_PREFIX', 'SHORT_10', 'LONG_12']);
+        if (boundaryType === 'VIRTUAL_PREFIX') {
+            const prefix = this.pickRandom(this.VIRTUAL_PREFIXES);
+            const suffix = this.randomDigits(8);
+            const value = `${prefix}${suffix}`;
+            return this.createResult(value, 'BOUNDARY', `边界值号段：新兴/虚拟运营商/广电号段 [${prefix}]，测试系统手机号白名单正则是否过于陈旧`, { prefix, isVirtualOrNew: true });
+        }
+        else if (boundaryType === 'SHORT_10') {
+            const prefix = this.pickRandom(this.STANDARD_PREFIXES);
+            const suffix = this.randomDigits(7); // 3 + 7 = 10 位
+            const value = `${prefix}${suffix}`;
+            return this.createResult(value, 'BOUNDARY', `边界长度：刚好 10 位手机号（缺失末位），测试下限长度与正则边界拦截`, { length: 10 });
+        }
+        else {
+            const prefix = this.pickRandom(this.STANDARD_PREFIXES);
+            const suffix = this.randomDigits(9); // 3 + 9 = 12 位
+            const value = `${prefix}${suffix}`;
+            return this.createResult(value, 'BOUNDARY', `边界长度：刚好 12 位手机号（多出一码），测试上限长度截断与正则边界拦截`, { length: 12 });
+        }
+    }
+    /**
+     * ABNORMAL: 异常注入
+     * - 包含字母: 1380013800a
+     * - 包含空格分隔符: 138 0000 0000
+     * - 包含短横线: 138-0000-0000
+     * - 全角数字: １３８００１３８０００
+     */
+    generateAbnormal(context) {
+        const errorType = this.pickRandom(['CONTAINS_ALPHA', 'CONTAINS_SPACES', 'CONTAINS_HYPHEN', 'FULL_WIDTH_DIGITS']);
+        if (errorType === 'CONTAINS_ALPHA') {
+            const value = '1380013800a';
+            return this.createResult(value, 'ABNORMAL', '非法字符异常：手机号末尾包含英文字母 [a]，测试纯数字强校验与防注入', { invalidChar: 'a' });
+        }
+        else if (errorType === 'CONTAINS_SPACES') {
+            const value = '138 0000 0000';
+            return this.createResult(value, 'ABNORMAL', '格式异常：手机号包含空格分隔符 (138 0000 0000)，测试是否阻断未格式化提交', { hasSpace: true });
+        }
+        else if (errorType === 'CONTAINS_HYPHEN') {
+            const value = '138-0000-0000';
+            return this.createResult(value, 'ABNORMAL', '格式异常：手机号包含短横杠分隔符 (138-0000-0000)，测试掩码未清洗异常', { hasHyphen: true });
+        }
+        else {
+            // 全角数字 １３８００１３８０００
+            const value = '１３８００１３８０００';
+            return this.createResult(value, 'ABNORMAL', '全角字符异常：全角数字 [１３８００１３８０００]，测试输入过滤与标准化处理', { isFullWidth: true });
+        }
+    }
+    /**
+     * CONCURRENCY: 固定保留测试手机号
+     */
+    generateConcurrency(context) {
+        const FIXED_MOBILE = '13800000000';
+        return this.createResult(FIXED_MOBILE, 'CONCURRENCY', '并发冲突样本：使用固定测试手机号，用于高并发下注册/绑卡唯一性冲突验证', { isFixed: true, targetKey: FIXED_MOBILE });
+    }
+    /**
+     * COMPATIBILITY: 兼容性验证 (国际化标准格式)
+     */
+    generateCompatibility(context) {
+        const formatType = this.pickRandom(['PLUS_86', 'DOUBLE_ZERO_86']);
+        const num = `138${this.randomDigits(8)}`;
+        if (formatType === 'PLUS_86') {
+            const value = `+86 ${num}`;
+            return this.createResult(value, 'COMPATIBILITY', '兼容性样本：包含国际区号前缀 [+86 ]，测试系统是否支持国际化或自动去除前缀', { prefix: '+86' });
+        }
+        else {
+            const value = `0086-${num}`;
+            return this.createResult(value, 'COMPATIBILITY', '兼容性样本：包含电信国际前缀 [0086-]，测试旧通信系统号码清洗规范', { prefix: '0086-' });
+        }
+    }
+}
+Object.defineProperty(MobileStrategy, "FIELD_TYPE", {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: 'phone'
+});
+
+
+  /**
+ * 通用文本场景策略 (覆盖 XSS/SQL 注入、边界长度、全角生僻字兼容性)
+ */
+
+class TextStrategy extends BaseScenarioStrategy {
+    constructor() {
+        super(...arguments);
+        Object.defineProperty(this, "fieldType", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: TextStrategy.FIELD_TYPE
+        });
+        Object.defineProperty(this, "name", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: '通用文本与字符串'
+        });
+        Object.defineProperty(this, "NORMAL_SAMPLES", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: [
+                '数字化校园信息化综合服务平台',
+                '基于微服务架构的分布式高校财务系统升级改造工程',
+                '智慧教学实验平台采购及技术支持服务',
+                '高性能计算集群采购与运维保障项目',
+                '大数据分析与协同决策支持中心建设项目'
+            ]
+        });
+    }
+    static getInstance() {
+        if (!this.instance) {
+            this.instance = new TextStrategy();
+        }
+        return this.instance;
+    }
+    /**
+     * NORMAL: 合规常规文本
+     */
+    generateNormal(context) {
+        const raw = this.pickRandom(this.NORMAL_SAMPLES);
+        const maxLen = (context && context.maxLength) || 100;
+        const value = raw.length > maxLen ? raw.slice(0, maxLen) : raw;
+        return this.createResult(value, 'NORMAL', `标准合规业务文本（长度 ${value.length} 字）`, { length: value.length });
+    }
+    /**
+     * BOUNDARY: 边界值
+     * - 达到 maxLength 极限长度的完整字符块
+     * - 最小允许长度（单字符 1位）
+     */
+    generateBoundary(context) {
+        const maxLen = (context && context.maxLength && context.maxLength > 0) ? context.maxLength : 255;
+        const boundaryType = this.pickRandom(['MAX_LENGTH_HIT', 'MIN_SINGLE_CHAR']);
+        if (boundaryType === 'MAX_LENGTH_HIT') {
+            const pattern = '测试文本极限长度边界用例ABC123';
+            let value = '';
+            while (value.length < maxLen) {
+                value += pattern;
+            }
+            value = value.slice(0, maxLen);
+            return this.createResult(value, 'BOUNDARY', `边界值：刚好达到输入框允许的最大极限长度 [${maxLen} 字符]，测试数据库字段长度上限拦截`, { targetLength: maxLen, actualLength: value.length });
+        }
+        else {
+            const value = 'A';
+            return this.createResult(value, 'BOUNDARY', '边界值：最小有效单字符输入 [A]，测试输入框最小边界', { length: 1 });
+        }
+    }
+    /**
+     * ABNORMAL: 异常与安全注入测试
+     * - XSS 注入样本 (<img src=x onerror=alert(1)>)
+     * - SQL 注入样本 (' OR '1'='1)
+     * - 特殊对象序列化残留 ([object Object], undefined, null, NaN)
+     * - 纯不可见空白字符 (\t\n  )
+     */
+    generateAbnormal(context) {
+        const abnormalType = this.pickRandom(['XSS_INJECTION', 'SQL_INJECTION', 'OBJECT_RESIDUE', 'EMPTY_WHITESPACES']);
+        if (abnormalType === 'XSS_INJECTION') {
+            const xssList = [
+                '<img src=x onerror=alert(1)>',
+                '<script>alert("xss")</script>',
+                '"><svg/onload=alert(1)>',
+                'javascript:alert(1)'
+            ];
+            const value = this.pickRandom(xssList);
+            return this.createResult(value, 'ABNORMAL', `XSS 攻击注入测试：[${value}]，验证页面富文本防注入与转义能力`, { attackCategory: 'XSS' });
+        }
+        else if (abnormalType === 'SQL_INJECTION') {
+            const sqlList = [
+                "' OR '1'='1",
+                "'; DROP TABLE users; --",
+                "1' UNION SELECT null, version() --",
+                "admin' --"
+            ];
+            const value = this.pickRandom(sqlList);
+            return this.createResult(value, 'ABNORMAL', `SQL 注入攻击探测样本：[${value}]，验证服务端参数化查询防御能力`, { attackCategory: 'SQLi' });
+        }
+        else if (abnormalType === 'OBJECT_RESIDUE') {
+            const residueList = ['[object Object]', 'undefined', 'null', 'NaN'];
+            const value = this.pickRandom(residueList);
+            return this.createResult(value, 'ABNORMAL', `前端序列化残留异常：注入 [${value}]，验证后端是否对前端弱类型字符串有严格阻断`, { attackCategory: 'TYPE_RESIDUE' });
+        }
+        else {
+            const value = '   \t   \n  \u3000\u3000 ';
+            return this.createResult(value, 'ABNORMAL', '纯空白绕过测试：混合包含全角空格、半角空格与制表符换行符，验证必填校验与 Trim 逻辑', { isOnlyWhitespace: true });
+        }
+    }
+    /**
+     * CONCURRENCY: 固定测试资源键
+     */
+    generateConcurrency(context) {
+        const FIXED_KEY = 'TEST_CONCURRENT_LOCK_KEY_RESOURCE_01';
+        return this.createResult(FIXED_KEY, 'CONCURRENCY', '并发冲突样本：使用固定唯一业务名称/标识键，用于模拟多线程/多客户端重复提交冲突', { isFixed: true, targetKey: FIXED_KEY });
+    }
+    /**
+     * COMPATIBILITY: 字符集与排版兼容性验证
+     * - 4字节生僻字 (𠮷, 𩸽, 𪚥) 测试 utf8 与 utf8mb4
+     * - 全角半角混排
+     * - Windows 回车换行 (\r\n) 与多语言符号
+     */
+    generateCompatibility(context) {
+        const compatType = this.pickRandom(['SURROGATE_PAIR', 'FULL_HALF_MIX', 'CRLF_NEWLINE']);
+        if (compatType === 'SURROGATE_PAIR') {
+            // 4字节生僻字: 𠮷 (U+20BB7), 𩸽 (U+29E3D)
+            const value = '张𠮷野𩸽（utf8mb4生僻汉字测试）';
+            return this.createResult(value, 'COMPATIBILITY', '字符集兼容性：包含 4 字节代理对生僻汉字 [𠮷, 𩸽]，测试数据库 utf8mb4 编码支持', { containsUtf8mb4: true });
+        }
+        else if (compatType === 'FULL_HALF_MIX') {
+            const value = '项目ＡＢＣ（２０２６）－第01号，【重点】';
+            return this.createResult(value, 'COMPATIBILITY', '排版兼容性：全角半角字母、数字与符号极端混排，测试文本清洗与搜索匹配兼容度', { isMixedWidth: true });
+        }
+        else {
+            const value = '第一阶段目标;\r\n第二阶段目标;\r\n第三阶段目标。';
+            return this.createResult(value, 'COMPATIBILITY', '跨平台换行符兼容性：包含 Windows 标准 \\r\\n 换行符与分号混排，测试跨系统文本换行解析', { hasCRLF: true });
+        }
+    }
+}
+Object.defineProperty(TextStrategy, "FIELD_TYPE", {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: 'text'
+});
+
+
+  /**
+ * 通用数字与金额数值场景策略 (覆盖安全溢出、财务精度、边界极值与格式兼容)
+ */
+
+class NumberStrategy extends BaseScenarioStrategy {
+    constructor() {
+        super(...arguments);
+        Object.defineProperty(this, "fieldType", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: NumberStrategy.FIELD_TYPE
+        });
+        Object.defineProperty(this, "name", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: '通用数字与财务数值'
+        });
+    }
+    static getInstance() {
+        if (!this.instance) {
+            this.instance = new NumberStrategy();
+        }
+        return this.instance;
+    }
+    /**
+     * NORMAL: 合规标准数值
+     */
+    generateNormal(context) {
+        let min = 10;
+        let max = 10000;
+        if (context && context.min !== undefined && !isNaN(Number(context.min))) {
+            min = Number(context.min);
+        }
+        if (context && context.max !== undefined && !isNaN(Number(context.max))) {
+            max = Number(context.max);
+        }
+        const val = (Math.random() * (max - min) + min).toFixed(2);
+        return this.createResult(val, 'NORMAL', `标准合规数值：区间 [${min}, ${max}] 内的有效数值 ${val}`, { min, max, value: Number(val) });
+    }
+    /**
+     * BOUNDARY: 边界值
+     * - 0
+     * - 极小正数 0.01
+     * - 极小负数 -0.01
+     * - JS 最大安全整数 Number.MAX_SAFE_INTEGER (9007199254740991)
+     * - 边界上下文：刚好等于 context.min 或 context.max
+     */
+    generateBoundary(context) {
+        const boundaryOptions = ['ZERO', 'MIN_POSITIVE', 'MIN_NEGATIVE', 'MAX_SAFE_INT'];
+        if (context && (context.min !== undefined || context.max !== undefined)) {
+            boundaryOptions.push('CONTEXT_EDGE');
+        }
+        const chosen = this.pickRandom(boundaryOptions);
+        if (chosen === 'ZERO') {
+            return this.createResult('0', 'BOUNDARY', '边界值：零值 [0]，测试业务系统对零值的除零保护与非空/正数校验', { value: 0 });
+        }
+        else if (chosen === 'MIN_POSITIVE') {
+            return this.createResult('0.01', 'BOUNDARY', '边界值：最小正小数 [0.01] (分)，测试货币最小计数单位', { value: 0.01 });
+        }
+        else if (chosen === 'MIN_NEGATIVE') {
+            return this.createResult('-0.01', 'BOUNDARY', '边界值：极小负数 [-0.01]，测试临界负数拦截', { value: -0.01 });
+        }
+        else if (chosen === 'MAX_SAFE_INT') {
+            const maxSafe = String(Number.MAX_SAFE_INTEGER);
+            return this.createResult(maxSafe, 'BOUNDARY', `边界值：JS 最大安全整数 [${maxSafe}]，测试数据库 BigInt/Decimal 溢出精度`, { value: Number.MAX_SAFE_INTEGER });
+        }
+        else {
+            const edge = context && context.max !== undefined ? String(context.max) : String(context && context.min);
+            return this.createResult(edge, 'BOUNDARY', `边界值：控件限定临界值 [${edge}]，测试设定的最大/最小值边界匹配`, { edge });
+        }
+    }
+    /**
+     * ABNORMAL: 异常注入
+     * - 非数字字符注入: abc, 12.34.56
+     * - 负数异常（在需要正数的场景）
+     * - 浮点精度爆炸（超长小数）
+     * - 巨大溢出数值 (1e308)
+     */
+    generateAbnormal(context) {
+        const abnormalType = this.pickRandom(['NOT_A_NUMBER', 'MULTIPLE_DOTS', 'ILLEGAL_NEGATIVE', 'PRECISION_OVERFLOW', 'INFINITY_EXPONENT']);
+        if (abnormalType === 'NOT_A_NUMBER') {
+            return this.createResult('999abc', 'ABNORMAL', '非纯数字异常：在数字输入框注入字母混合串 [999abc]，测试强类型转换', { input: '999abc' });
+        }
+        else if (abnormalType === 'MULTIPLE_DOTS') {
+            return this.createResult('12.34.56', 'ABNORMAL', '格式异常：包含多个小数点的非法数值 [12.34.56]，测试浮点解析防御', { input: '12.34.56' });
+        }
+        else if (abnormalType === 'ILLEGAL_NEGATIVE') {
+            return this.createResult('-99999.00', 'ABNORMAL', '非法负值：违规注入负数金额 [-99999.00]，测试正向数值防御', { value: -99999 });
+        }
+        else if (abnormalType === 'PRECISION_OVERFLOW') {
+            const longDecimals = '0.1234567890123456789';
+            return this.createResult(longDecimals, 'ABNORMAL', `精度溢出：超过 18 位小数的高精度长浮点 [${longDecimals}]，测试截断与四舍五入防爆`, { decimalPlaces: 19 });
+        }
+        else {
+            return this.createResult('1e308', 'ABNORMAL', '巨大浮点溢出：IEEE 754 极大值 [1e308]，测试服务端内存与序列化溢出防护', { exponent: 308 });
+        }
+    }
+    /**
+     * CONCURRENCY: 固定测试数值
+     */
+    generateConcurrency(context) {
+        const FIXED_NUM = '888888';
+        return this.createResult(FIXED_NUM, 'CONCURRENCY', '并发冲突样本：固定特定金额数值，用于批量对账或并发库存扣减测试', { isFixed: true, value: 888888 });
+    }
+    /**
+     * COMPATIBILITY: 格式兼容性验证
+     * - 财务千分位逗号 (1,234,567.89)
+     * - 科学计数法 (1.25e4)
+     * - 带前导零 (00123)
+     */
+    generateCompatibility(context) {
+        const compatType = this.pickRandom(['THOUSANDS_SEPARATOR', 'SCIENTIFIC_NOTATION', 'LEADING_ZEROS']);
+        if (compatType === 'THOUSANDS_SEPARATOR') {
+            const value = '1,234,567.89';
+            return this.createResult(value, 'COMPATIBILITY', '财务千分位兼容性：包含格式化逗号 [1,234,567.89]，测试前端格式化反解析能力', { format: 'currency_thousands' });
+        }
+        else if (compatType === 'SCIENTIFIC_NOTATION') {
+            const value = '1.25e4';
+            return this.createResult(value, 'COMPATIBILITY', '科学计数法兼容性：标准科学计数法表示 [1.25e4] (即 12500)，测试解析转换', { format: 'scientific' });
+        }
+        else {
+            const value = '007520';
+            return this.createResult(value, 'COMPATIBILITY', '前导零兼容性：数字包含前导零 [007520]，测试系统是否会被误判为八进制或遭自动抹除', { format: 'leading_zeros' });
+        }
+    }
+}
+Object.defineProperty(NumberStrategy, "FIELD_TYPE", {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: 'number'
+});
+
+
+  /**
+ * 策略调度中心与场景矩阵引擎 (Scenario Engine & Strategy Registry)
+ */
+
+
+
+
+
+class StrategyRegistry {
+    constructor() {
+        Object.defineProperty(this, "strategies", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: new Map()
+        });
+        Object.defineProperty(this, "aliasMap", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: new Map()
+        });
+        this.registerDefaults();
+    }
+    static getInstance() {
+        if (!this.instance) {
+            this.instance = new StrategyRegistry();
+        }
+        return this.instance;
+    }
+    /**
+     * 注册默认的 5 大核心策略
+     */
+    registerDefaults() {
+        // 1. 注册核心策略实例
+        this.register(IdCardStrategy.getInstance());
+        this.register(CreditCodeStrategy.getInstance());
+        this.register(MobileStrategy.getInstance());
+        this.register(TextStrategy.getInstance());
+        this.register(NumberStrategy.getInstance());
+        // 2. 映射常用别名
+        this.addAlias('idcard', IdCardStrategy.FIELD_TYPE);
+        this.addAlias('identitycard', IdCardStrategy.FIELD_TYPE);
+        this.addAlias('certno', IdCardStrategy.FIELD_TYPE);
+        this.addAlias('creditcode', CreditCodeStrategy.FIELD_TYPE);
+        this.addAlias('taxno', CreditCodeStrategy.FIELD_TYPE);
+        this.addAlias('tax_no', CreditCodeStrategy.FIELD_TYPE);
+        this.addAlias('mobile', MobileStrategy.FIELD_TYPE);
+        this.addAlias('tel', MobileStrategy.FIELD_TYPE);
+        this.addAlias('telephone', MobileStrategy.FIELD_TYPE);
+        this.addAlias('cellphone', MobileStrategy.FIELD_TYPE);
+        this.addAlias('amount', NumberStrategy.FIELD_TYPE);
+        this.addAlias('amountWan', NumberStrategy.FIELD_TYPE);
+        this.addAlias('money', NumberStrategy.FIELD_TYPE);
+        this.addAlias('price', NumberStrategy.FIELD_TYPE);
+        this.addAlias('weight', NumberStrategy.FIELD_TYPE);
+        this.addAlias('count', NumberStrategy.FIELD_TYPE);
+        this.addAlias('name', TextStrategy.FIELD_TYPE);
+        this.addAlias('remark', TextStrategy.FIELD_TYPE);
+        this.addAlias('address', TextStrategy.FIELD_TYPE);
+        this.addAlias('projectName', TextStrategy.FIELD_TYPE);
+        this.addAlias('projectReason', TextStrategy.FIELD_TYPE);
+        this.addAlias('projectContent', TextStrategy.FIELD_TYPE);
+        this.addAlias('procureContent', TextStrategy.FIELD_TYPE);
+        this.addAlias('indicatorName', TextStrategy.FIELD_TYPE);
+    }
+    /**
+     * 注册自定义或扩展策略
+     */
+    register(strategy) {
+        this.strategies.set(strategy.fieldType.toLowerCase(), strategy);
+    }
+    /**
+     * 添加字段别名映射
+     */
+    addAlias(alias, targetFieldType) {
+        this.aliasMap.set(alias.toLowerCase(), targetFieldType.toLowerCase());
+    }
+    /**
+     * 获取匹配的策略，若无精准匹配则兜底为文本策略
+     */
+    getStrategy(fieldType) {
+        const normalized = (fieldType || '').toLowerCase();
+        const resolvedType = this.aliasMap.get(normalized) || normalized;
+        const matched = this.strategies.get(resolvedType);
+        if (matched) {
+            return matched;
+        }
+        // 兜底文本策略
+        return TextStrategy.getInstance();
+    }
+    /**
+     * 获取所有已注册的策略列表
+     */
+    getAllStrategies() {
+        return Array.from(this.strategies.values());
+    }
+}
+/**
+ * 场景矩阵统一执行引擎
+ */
+class ScenarioEngine {
+    /**
+     * 单次场景化生成
+     * @param fieldType 字段类型标识
+     * @param scenario 测试场景 (NORMAL | BOUNDARY | ABNORMAL | CONCURRENCY | COMPATIBILITY)
+     * @param context 控件上下文
+     */
+    static generate(fieldType, scenario, context) {
+        const strategy = StrategyRegistry.getInstance().getStrategy(fieldType);
+        return strategy.generate(scenario, context);
+    }
+    /**
+     * 针对指定字段一键生成 5 类测试场景全矩阵
+     * @param fieldType 字段类型标识
+     * @param context 控件上下文
+     */
+    static generateMatrix(fieldType, context) {
+        const strategy = StrategyRegistry.getInstance().getStrategy(fieldType);
+        return {
+            NORMAL: strategy.generate('NORMAL', context),
+            BOUNDARY: strategy.generate('BOUNDARY', context),
+            ABNORMAL: strategy.generate('ABNORMAL', context),
+            CONCURRENCY: strategy.generate('CONCURRENCY', context),
+            COMPATIBILITY: strategy.generate('COMPATIBILITY', context)
+        };
+    }
+}
+// 导出单例与核心类供外部使用
+
+
+
+  /**
  * 表单字段智能语义识别引擎
  * 分析 input/textarea/select 的属性、关联 label、父级表单提示文本等，精确推断字段类型
  */
@@ -1161,11 +2056,72 @@ function detectFieldType(element) {
   return 'procureContent';
 }
 
+/**
+ * 提取输入控件结构化上下文信息 (包含属性约束与关联标签)
+ * @param {HTMLElement} element 
+ * @returns {Object} 结构化上下文
+ */
+function extractFieldContext(element) {
+  if (!element) return {};
+  const tagName = (element.tagName || '').toLowerCase();
+  const type = (element.getAttribute('type') || (tagName === 'textarea' ? 'textarea' : 'text')).toLowerCase();
+  const name = element.getAttribute('name') || '';
+  const id = element.getAttribute('id') || '';
+  const placeholder = element.getAttribute('placeholder') || '';
+  const prop = element.getAttribute('data-prop') || element.getAttribute('v-model') || '';
+
+  const maxLenAttr = element.getAttribute('maxlength') || element.getAttribute('max-length');
+  const minLenAttr = element.getAttribute('minlength') || element.getAttribute('min-length');
+  const minAttr = element.getAttribute('min');
+  const maxAttr = element.getAttribute('max');
+  const pattern = element.getAttribute('pattern') || '';
+  const required = element.hasAttribute('required') || element.getAttribute('aria-required') === 'true';
+  const step = element.getAttribute('step') || '';
+
+  const maxLength = maxLenAttr && !isNaN(parseInt(maxLenAttr, 10)) ? parseInt(maxLenAttr, 10) : undefined;
+  const minLength = minLenAttr && !isNaN(parseInt(minLenAttr, 10)) ? parseInt(minLenAttr, 10) : undefined;
+  const min = minAttr !== null && minAttr !== undefined && !isNaN(Number(minAttr)) ? Number(minAttr) : undefined;
+  const max = maxAttr !== null && maxAttr !== undefined && !isNaN(Number(maxAttr)) ? Number(maxAttr) : undefined;
+
+  let labelText = '';
+  if (id) {
+    try {
+      const lbl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      if (lbl && lbl.innerText) labelText = lbl.innerText.trim();
+    } catch (e) {}
+  }
+  if (!labelText && typeof element.closest === 'function') {
+    const parentFormItem = element.closest('.el-form-item, .ant-form-item');
+    if (parentFormItem) {
+      const lbl = parentFormItem.querySelector('.el-form-item__label, .ant-form-item-label');
+      if (lbl && lbl.innerText) labelText = lbl.innerText.trim();
+    }
+  }
+
+  return {
+    tagName,
+    type,
+    name,
+    id,
+    placeholder,
+    prop,
+    maxLength,
+    minLength,
+    min,
+    max,
+    pattern,
+    required,
+    step,
+    label: labelText
+  };
+}
+
 
   /**
  * 表单数据注入与现代前端框架穿透引擎
  * 支持原生、Vue2/Vue3 (v-model)、React (SyntheticEvent)、Angular 及各种 UI 库 (Element Plus/Antd 等)
  */
+
 
 
 
@@ -1212,9 +2168,10 @@ function applyHighlightEffect(element) {
  * 为单个元素生成并填充数据
  * @param {HTMLElement} element 
  * @param {string} [specifiedType] 显式指定类型，如不提供则自动智能推断
+ * @param {string} [scenario='NORMAL'] 测试场景类型 (NORMAL|BOUNDARY|ABNORMAL|CONCURRENCY|COMPATIBILITY)
  * @returns {boolean} 是否填充成功
  */
-function fillSingleElement(element, specifiedType) {
+function fillSingleElement(element, specifiedType, scenario = 'NORMAL') {
   if (!element || element.disabled || element.readOnly) {
     return false;
   }
@@ -1277,101 +2234,120 @@ function fillSingleElement(element, specifiedType) {
     return false;
   }
 
+  // 提取输入控件结构化上下文
+  const fieldContext = extractFieldContext(element);
+
   // 推断或使用指定的数据类型
   const fieldType = specifiedType || detectFieldType(element);
+  if (fieldType === 'projectProperty') {
+    return false;
+  }
+
   let fakeValue = '';
 
-  switch (fieldType) {
-    case 'name':
-      fakeValue = MockGenerator.name();
-      break;
-    case 'phone':
-      fakeValue = MockGenerator.phone();
-      break;
-    case 'idCard':
-      fakeValue = MockGenerator.idCard();
-      break;
-    case 'usci':
-      fakeValue = MockGenerator.usci();
-      break;
-    case 'bankCard':
-      fakeValue = MockGenerator.bankCard();
-      break;
-    case 'email':
-      fakeValue = MockGenerator.email();
-      break;
-    case 'amount':
-      fakeValue = MockGenerator.amount();
-      break;
-    case 'amountWan':
-      fakeValue = MockGenerator.amount({ min: 10, max: 150, decimals: 2 });
-      break;
-    case 'procureContent':
-      fakeValue = MockGenerator.procureContent();
-      break;
-    case 'procureRemark':
-      fakeValue = MockGenerator.procureRemark();
-      break;
-    case 'indicatorName':
-      fakeValue = MockGenerator.indicatorName();
-      break;
-    case 'indicatorUnit':
-      fakeValue = MockGenerator.indicatorUnit();
-      break;
-    case 'indicatorValue':
-      fakeValue = MockGenerator.indicatorValue();
-      break;
-    case 'weight':
-      fakeValue = '15';
-      break;
-    case 'calcSymbol':
-      fakeValue = MockGenerator.calcSymbol();
-      break;
-    case 'projectProperty':
-      // 用户要求：非真实弹窗数据抓取时不乱填写死字典，保持空白留给用户手动弹窗选择
-      return false;
-    case 'department':
-      fakeValue = MockGenerator.department();
-      break;
-    case 'projectLeader':
-      fakeValue = MockGenerator.projectLeader();
-      break;
-    case 'projectName':
-      fakeValue = MockGenerator.projectName();
-      break;
-    case 'projectReason':
-      fakeValue = MockGenerator.projectReason();
-      break;
-    case 'projectContent':
-      fakeValue = MockGenerator.projectContent();
-      break;
-    case 'budgetReason':
-      fakeValue = MockGenerator.budgetReason();
-      break;
-    case 'companyName':
-      fakeValue = MockGenerator.companyName();
-      break;
-    case 'address':
-      fakeValue = MockGenerator.address();
-      break;
-    case 'date':
-      fakeValue = MockGenerator.date();
-      break;
-    case 'dateTime':
-      fakeValue = MockGenerator.dateTime();
-      break;
-    case 'password':
-      fakeValue = MockGenerator.password();
-      break;
-    case 'zipCode':
-      fakeValue = MockGenerator.zipCode();
-      break;
-    case 'remark':
-      fakeValue = MockGenerator.remark();
-      break;
-    default:
-      fakeValue = MockGenerator.procureContent();
-      break;
+  // 场景驱动矩阵引擎调度 (当启用 BOUNDARY / ABNORMAL / CONCURRENCY / COMPATIBILITY 时全场景接管)
+  if (scenario && scenario !== 'NORMAL' && typeof ScenarioEngine !== 'undefined') {
+    const result = ScenarioEngine.generate(fieldType, scenario, fieldContext);
+    fakeValue = result && result.value !== undefined ? result.value : '';
+  } else {
+    // 正常场景 (NORMAL)
+    switch (fieldType) {
+      case 'name':
+        fakeValue = MockGenerator.name();
+        break;
+      case 'phone':
+        fakeValue = typeof ScenarioEngine !== 'undefined'
+          ? ScenarioEngine.generate('phone', 'NORMAL', fieldContext).value
+          : MockGenerator.phone();
+        break;
+      case 'idCard':
+        fakeValue = typeof ScenarioEngine !== 'undefined'
+          ? ScenarioEngine.generate('idCard', 'NORMAL', fieldContext).value
+          : MockGenerator.idCard();
+        break;
+      case 'usci':
+        fakeValue = typeof ScenarioEngine !== 'undefined'
+          ? ScenarioEngine.generate('usci', 'NORMAL', fieldContext).value
+          : MockGenerator.usci();
+        break;
+      case 'bankCard':
+        fakeValue = MockGenerator.bankCard();
+        break;
+      case 'email':
+        fakeValue = MockGenerator.email();
+        break;
+      case 'amount':
+        fakeValue = MockGenerator.amount();
+        break;
+      case 'amountWan':
+        fakeValue = MockGenerator.amount({ min: 10, max: 150, decimals: 2 });
+        break;
+      case 'procureContent':
+        fakeValue = MockGenerator.procureContent();
+        break;
+      case 'procureRemark':
+        fakeValue = MockGenerator.procureRemark();
+        break;
+      case 'indicatorName':
+        fakeValue = MockGenerator.indicatorName();
+        break;
+      case 'indicatorUnit':
+        fakeValue = MockGenerator.indicatorUnit();
+        break;
+      case 'indicatorValue':
+        fakeValue = MockGenerator.indicatorValue();
+        break;
+      case 'weight':
+        fakeValue = '15';
+        break;
+      case 'calcSymbol':
+        fakeValue = MockGenerator.calcSymbol();
+        break;
+      case 'projectProperty':
+        return false;
+      case 'department':
+        fakeValue = MockGenerator.department();
+        break;
+      case 'projectLeader':
+        fakeValue = MockGenerator.projectLeader();
+        break;
+      case 'projectName':
+        fakeValue = MockGenerator.projectName();
+        break;
+      case 'projectReason':
+        fakeValue = MockGenerator.projectReason();
+        break;
+      case 'projectContent':
+        fakeValue = MockGenerator.projectContent();
+        break;
+      case 'budgetReason':
+        fakeValue = MockGenerator.budgetReason();
+        break;
+      case 'companyName':
+        fakeValue = MockGenerator.companyName();
+        break;
+      case 'address':
+        fakeValue = MockGenerator.address();
+        break;
+      case 'date':
+        fakeValue = MockGenerator.date();
+        break;
+      case 'dateTime':
+        fakeValue = MockGenerator.dateTime();
+        break;
+      case 'password':
+        fakeValue = MockGenerator.password();
+        break;
+      case 'zipCode':
+        fakeValue = MockGenerator.zipCode();
+        break;
+      case 'remark':
+        fakeValue = MockGenerator.remark();
+        break;
+      default:
+        fakeValue = MockGenerator.procureContent();
+        break;
+    }
   }
 
   setNativeValue(element, fakeValue);
@@ -1470,18 +2446,19 @@ function silentlyFillSelects(container = document, onlyEmpty = false) {
 
 /**
  * 批量填充容器内的所有可用表单字段
- * 包含：权重总和恒等于100分配算法、Element UI 下拉框值静默随机选择、业务字段精准映射
+ * 包含：权重分配算法、Element UI 下拉框值静默随机选择、场景化矩阵分发
  * @param {HTMLElement|Document} [container=document] 
  * @param {Object} [options]
  * @param {boolean} [options.onlyEmpty=false] 仅填充当前为空的输入项
+ * @param {string} [options.scenario='NORMAL'] 测试场景类型 (NORMAL|BOUNDARY|ABNORMAL|CONCURRENCY|COMPATIBILITY)
  * @returns {number} 成功填充的字段数量
  */
 function fillAllFormElements(container = document, options = {}) {
-  const { onlyEmpty = false } = options;
+  const { onlyEmpty = false, scenario = 'NORMAL' } = options;
   let filledCount = 0;
   const handledSet = new Set();
 
-  // 1. 优先协同处理所有“权重(%)”输入框，严格保障所有行权重合计为 100
+  // 1. 优先协同处理所有“权重(%)”输入框
   const allInputs = Array.from(container.querySelectorAll('input:not([disabled])'));
   const weightInputs = allInputs.filter(input => {
     if (input.readOnly) return false;
@@ -1494,7 +2471,25 @@ function fillAllFormElements(container = document, options = {}) {
   });
 
   if (weightInputs.length > 0) {
-    const weights = MockGenerator.generateWeights(weightInputs.length);
+    let weights = [];
+    if (scenario === 'NORMAL') {
+      weights = MockGenerator.generateWeights(weightInputs.length);
+    } else if (scenario === 'BOUNDARY') {
+      // 边界值测试：第一项占 100，其余全为 0
+      weights = weightInputs.map((_, idx) => (idx === 0 ? '100' : '0'));
+    } else if (scenario === 'ABNORMAL') {
+      // 异常值测试：超限 150 或负数 -10
+      weights = weightInputs.map((_, idx) => (idx === 0 ? '150' : '-10'));
+    } else if (scenario === 'CONCURRENCY') {
+      // 并发冲突测试：固定权重 50
+      weights = weightInputs.map(() => '50');
+    } else if (scenario === 'COMPATIBILITY') {
+      // 兼容性测试：带百分号格式串
+      weights = weightInputs.map(() => '100.00%');
+    } else {
+      weights = MockGenerator.generateWeights(weightInputs.length);
+    }
+
     weightInputs.forEach((input, idx) => {
       if (onlyEmpty && (input.value || '').trim() !== '') {
         return;
@@ -1523,7 +2518,7 @@ function fillAllFormElements(container = document, options = {}) {
       }
     }
 
-    const ok = fillSingleElement(el);
+    const ok = fillSingleElement(el, null, scenario);
     if (ok) {
       handledSet.add(el);
       filledCount++;
@@ -1573,12 +2568,33 @@ function clearAllFormElements(container = document) {
 
   /**
  * Content Script 核心业务逻辑
- * 集成 Shadow DOM 悬浮控制胶囊、右键上下文目标捕获与跨进程消息响应
+ * 集成 Shadow DOM 悬浮控制胶囊、场景驱动矩阵选择器、右键上下文目标捕获与跨进程消息响应
  */
 
 
 
 let lastRightClickedElement = null;
+let currentScenario = 'NORMAL';
+
+const SCENARIO_META = {
+  NORMAL: { code: 'NORMAL', label: '正常业务场景', tag: '标', color: '#60a5fa' },
+  BOUNDARY: { code: 'BOUNDARY', label: '边界值场景', tag: '界', color: '#fbbf24' },
+  ABNORMAL: { code: 'ABNORMAL', label: '异常注入场景', tag: '异', color: '#f87171' },
+  CONCURRENCY: { code: 'CONCURRENCY', label: '并发冲突场景', tag: '发', color: '#c084fc' },
+  COMPATIBILITY: { code: 'COMPATIBILITY', label: '系统兼容场景', tag: '容', color: '#34d399' }
+};
+
+const SCENARIO_ORDER = ['NORMAL', 'BOUNDARY', 'ABNORMAL', 'CONCURRENCY', 'COMPATIBILITY'];
+
+// 从本地存储同步当前场景
+try {
+  chrome.storage.local.get({ activeScenario: 'NORMAL' }, (res) => {
+    if (res && res.activeScenario && SCENARIO_META[res.activeScenario]) {
+      currentScenario = res.activeScenario;
+      updateCapsuleBadge();
+    }
+  });
+} catch (e) {}
 
 // 监听右键点击事件，记录当前点击的目标元素
 document.addEventListener('contextmenu', (e) => {
@@ -1592,15 +2608,28 @@ document.addEventListener('contextmenu', (e) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const { action, payload } = request;
 
+  if (action === 'SET_SCENARIO') {
+    const sc = (payload && payload.scenario) || 'NORMAL';
+    if (SCENARIO_META[sc]) {
+      currentScenario = sc;
+      updateCapsuleBadge();
+      showCapsuleToast(`测试场景已切换：${SCENARIO_META[sc].label}`);
+    }
+    sendResponse({ success: true, scenario: currentScenario });
+    return true;
+  }
+
   if (action === 'FILL_ALL') {
-    const count = fillAllFormElements(document, { onlyEmpty: false });
-    sendResponse({ success: true, count });
+    const sc = (payload && payload.scenario) || currentScenario;
+    const count = fillAllFormElements(document, { onlyEmpty: false, scenario: sc });
+    sendResponse({ success: true, count, scenario: sc });
     return true;
   }
 
   if (action === 'FILL_EMPTY') {
-    const count = fillAllFormElements(document, { onlyEmpty: true });
-    sendResponse({ success: true, count });
+    const sc = (payload && payload.scenario) || currentScenario;
+    const count = fillAllFormElements(document, { onlyEmpty: true, scenario: sc });
+    sendResponse({ success: true, count, scenario: sc });
     return true;
   }
 
@@ -1613,9 +2642,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (action === 'FILL_SPECIFIC_TYPE') {
     // 优先填充右键命中的元素，其次当前聚焦的元素
     const target = lastRightClickedElement || document.activeElement;
+    const sc = (payload && payload.scenario) || currentScenario;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-      const ok = fillSingleElement(target, payload.type);
-      sendResponse({ success: ok });
+      const ok = fillSingleElement(target, payload.type, sc);
+      sendResponse({ success: ok, scenario: sc });
     } else {
       sendResponse({ success: false, reason: '未聚焦有效输入框' });
     }
@@ -1638,6 +2668,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 });
+
+let updateCapsuleBadge = () => {};
+let showCapsuleToast = () => {};
 
 /**
  * 创建基于 Shadow DOM 的极简悬浮小工具胶囊
@@ -1669,12 +2702,12 @@ function createFloatingWidget() {
     .widget-container {
       display: flex;
       align-items: center;
-      background: rgba(15, 23, 42, 0.85);
+      background: rgba(15, 23, 42, 0.88);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 9999px;
-      padding: 6px;
+      padding: 5px 6px;
       box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 1px 1px rgba(255, 255, 255, 0.08);
       transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -1682,8 +2715,8 @@ function createFloatingWidget() {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 36px;
-      height: 36px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
       border: none;
       background: transparent;
@@ -1710,6 +2743,26 @@ function createFloatingWidget() {
     .widget-btn:active {
       transform: translateY(0) scale(0.96);
     }
+    .scenario-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+    }
+    .scenario-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .scenario-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: #60a5fa;
+      border-radius: 4px;
+      line-height: 1;
+      letter-spacing: 0.5px;
+      transition: color 0.2s ease;
+    }
     .tooltip {
       position: absolute;
       bottom: calc(100% + 10px);
@@ -1733,13 +2786,13 @@ function createFloatingWidget() {
     }
     .divider {
       width: 1px;
-      height: 18px;
-      background: rgba(255, 255, 255, 0.1);
+      height: 16px;
+      background: rgba(255, 255, 255, 0.12);
       margin: 0 4px;
     }
     .badge-toast {
       position: absolute;
-      bottom: 54px;
+      bottom: 50px;
       right: 0;
       background: rgba(16, 185, 129, 0.92);
       color: #ffffff;
@@ -1755,6 +2808,7 @@ function createFloatingWidget() {
       align-items: center;
       gap: 6px;
       backdrop-filter: blur(8px);
+      white-space: nowrap;
     }
     .badge-toast.show {
       opacity: 1;
@@ -1767,21 +2821,26 @@ function createFloatingWidget() {
 
   container.innerHTML = `
     <button class="widget-btn primary" id="btn-fill-all">
-      ${getLucideIcon('wand', 18)}
-      <span class="tooltip">一键智能填充全部字段</span>
+      ${getLucideIcon('wand', 17)}
+      <span class="tooltip" id="tip-fill-all">智能填充当前页面</span>
     </button>
     <button class="widget-btn" id="btn-fill-empty">
-      ${getLucideIcon('sparkles', 16)}
+      ${getLucideIcon('sparkles', 15)}
       <span class="tooltip">仅填充空白字段</span>
     </button>
     <div class="divider"></div>
+    <button class="widget-btn scenario-btn" id="btn-scenario-toggle">
+      <span class="scenario-badge" id="scenario-badge">标</span>
+      <span class="tooltip" id="scenario-tooltip">测试场景：正常业务 [点击切换]</span>
+    </button>
+    <div class="divider"></div>
     <button class="widget-btn" id="btn-clear-all">
-      ${getLucideIcon('trash', 16)}
+      ${getLucideIcon('trash', 15)}
       <span class="tooltip">清空表单字段</span>
     </button>
     <div class="divider"></div>
     <button class="widget-btn close-btn" id="btn-close-bar">
-      ${getLucideIcon('close', 14)}
+      ${getLucideIcon('close', 13)}
       <span class="tooltip">隐藏悬浮胶囊</span>
     </button>
     <div class="badge-toast" id="toast">
@@ -1796,6 +2855,9 @@ function createFloatingWidget() {
 
   const toast = shadow.getElementById('toast');
   const toastText = shadow.getElementById('toast-text');
+  const scenarioBadge = shadow.getElementById('scenario-badge');
+  const scenarioTooltip = shadow.getElementById('scenario-tooltip');
+  const tipFillAll = shadow.getElementById('tip-fill-all');
 
   function showToast(text) {
     toastText.innerText = text;
@@ -1804,15 +2866,48 @@ function createFloatingWidget() {
       toast.classList.remove('show');
     }, 1800);
   }
+  showCapsuleToast = showToast;
+
+  function updateBadge() {
+    const meta = SCENARIO_META[currentScenario] || SCENARIO_META.NORMAL;
+    if (scenarioBadge) {
+      scenarioBadge.innerText = meta.tag;
+      scenarioBadge.style.color = meta.color;
+    }
+    if (scenarioTooltip) {
+      scenarioTooltip.innerText = `测试场景：${meta.label} [点击切换]`;
+    }
+    if (tipFillAll) {
+      tipFillAll.innerText = `[${meta.label}] 填充当前页面`;
+    }
+  }
+  updateCapsuleBadge = updateBadge;
+  updateBadge();
+
+  // 场景切换点击：按顺序循环切换
+  shadow.getElementById('btn-scenario-toggle').addEventListener('click', () => {
+    const currentIndex = SCENARIO_ORDER.indexOf(currentScenario);
+    const nextIndex = (currentIndex + 1) % SCENARIO_ORDER.length;
+    currentScenario = SCENARIO_ORDER[nextIndex];
+    updateBadge();
+
+    try {
+      chrome.storage.local.set({ activeScenario: currentScenario });
+    } catch (e) {}
+
+    showToast(`场景已切换为：${SCENARIO_META[currentScenario].label}`);
+  });
 
   shadow.getElementById('btn-fill-all').addEventListener('click', () => {
-    const count = fillAllFormElements(document, { onlyEmpty: false });
-    showToast(`已填充 ${count} 个字段`);
+    const meta = SCENARIO_META[currentScenario] || SCENARIO_META.NORMAL;
+    const count = fillAllFormElements(document, { onlyEmpty: false, scenario: currentScenario });
+    showToast(`[${meta.tag}] 已填充 ${count} 个字段`);
   });
 
   shadow.getElementById('btn-fill-empty').addEventListener('click', () => {
-    const count = fillAllFormElements(document, { onlyEmpty: true });
-    showToast(`已填充 ${count} 个空白项`);
+    const meta = SCENARIO_META[currentScenario] || SCENARIO_META.NORMAL;
+    const count = fillAllFormElements(document, { onlyEmpty: true, scenario: currentScenario });
+    showToast(`[${meta.tag}] 已填充 ${count} 个空白项`);
   });
 
   shadow.getElementById('btn-clear-all').addEventListener('click', () => {
@@ -1849,5 +2944,5 @@ try {
 }
 
 
-  console.log('[FakeCraft] 核心引擎已成功就绪，监听表单指令中...');
+  console.log('[FakeCraft] 场景化矩阵填充引擎已就绪，当前监听指令中...');
 })();
