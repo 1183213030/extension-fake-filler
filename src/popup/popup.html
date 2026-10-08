@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FakeCraft - 测试数据生成器</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 头部区域 -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon" id="brand-icon-slot"></div>
+        <div class="brand-text">
+          <h1 class="brand-title">FAKECRAFT</h1>
+          <span class="brand-subtitle">智能数据生成与填充引擎</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <span class="status-indicator"></span>
+        <span class="status-label">MV3 READY</span>
+      </div>
+    </header>
+
+    <!-- 快捷页面操作区 -->
+    <section class="quick-action-section">
+      <button class="action-btn primary" id="btn-page-fill-all">
+        <span class="btn-icon" id="icon-fill-all"></span>
+        <span class="btn-text">一键智能填充当前页面</span>
+      </button>
+      <div class="action-btn-group">
+        <button class="action-btn secondary" id="btn-page-fill-empty">
+          <span class="btn-icon" id="icon-fill-empty"></span>
+          <span>仅填空白项</span>
+        </button>
+        <button class="action-btn secondary danger" id="btn-page-clear">
+          <span class="btn-icon" id="icon-clear"></span>
+          <span>重置清空</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 导航 Tab -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-generator">
+        <span class="tab-icon" id="icon-tab-gen"></span>
+        <span>常用数据</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-batch">
+        <span class="tab-icon" id="icon-tab-batch"></span>
+        <span>批量生成</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-settings">
+        <span class="tab-icon" id="icon-tab-set"></span>
+        <span>配置偏好</span>
+      </button>
+    </nav>
+
+    <!-- 主体内容卡片区 -->
+    <main class="tab-content-wrapper">
+      <!-- Tab 1: 常用测试数据 -->
+      <div class="tab-pane active" id="tab-generator">
+        <div class="data-grid" id="data-cards-grid">
+          <!-- 数据卡片由 JS 动态生成渲染 -->
+        </div>
+      </div>
+
+      <!-- Tab 2: 批量生成 -->
+      <div class="tab-pane" id="tab-batch">
+        <div class="batch-panel">
+          <div class="form-row">
+            <label class="form-label">数据类型</label>
+            <select class="form-select" id="batch-type-select">
+              <option value="phone">手机号码</option>
+              <option value="idCard">身份证号码 (GB11643)</option>
+              <option value="name">中文姓名</option>
+              <option value="usci">统一社会信用代码</option>
+              <option value="bankCard">银行卡号 (Luhn)</option>
+              <option value="amount">测试金额</option>
+              <option value="email">电子邮箱</option>
+              <option value="companyName">公司企业名称</option>
+              <option value="address">中文详细地址</option>
+              <option value="uuid">UUID (v4)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label">生成数量</label>
+            <div class="number-stepper">
+              <button class="step-btn" id="batch-count-minus">-</button>
+              <input type="number" class="stepper-input" id="batch-count-input" value="10" min="1" max="500">
+              <button class="step-btn" id="batch-count-plus">+</button>
+            </div>
+          </div>
+          <div class="batch-actions">
+            <button class="btn-generate" id="btn-generate-batch">
+              <span class="btn-icon" id="icon-btn-batch"></span>
+              <span>开始生成</span>
+            </button>
+            <button class="btn-copy-batch" id="btn-copy-batch" disabled>
+              <span class="btn-icon" id="icon-btn-copy-batch"></span>
+              <span>复制为文本 (换行)</span>
+            </button>
+          </div>
+          <div class="preview-box-wrapper">
+            <div class="preview-header">
+              <span class="preview-title">结果预览</span>
+              <span class="preview-count" id="preview-count-label">0 项</span>
+            </div>
+            <textarea class="batch-preview-textarea" id="batch-preview" readonly placeholder="点击上方开始生成查看数据..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: 配置偏好 -->
+      <div class="tab-pane" id="tab-settings">
+        <div class="settings-panel">
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">网页悬浮快捷胶囊</div>
+              <div class="setting-desc">在目标测试页面右下角显示一键填充浮动条</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-floating-bar" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">金额区间下限</div>
+              <div class="setting-desc">默认金额随机最小值 (元)</div>
+            </div>
+            <input type="number" class="setting-input" id="setting-min-amount" value="100">
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">金额区间上限</div>
+              <div class="setting-desc">默认金额随机最大值 (元)</div>
+            </div>
+            <input type="number" class="setting-input" id="setting-max-amount" value="50000">
+          </div>
+
+          <div class="setting-save-box">
+            <button class="btn-save-settings" id="btn-save-settings">
+              <span class="btn-icon" id="icon-save-settings"></span>
+              <span>保存配置</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 浮动提示 Toast -->
+    <div class="global-toast" id="global-toast">
+      <span class="toast-icon" id="toast-icon"></span>
+      <span class="toast-message" id="toast-msg">已复制到剪贴板</span>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

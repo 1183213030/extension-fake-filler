@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FakeCraft 扩展功能联调测试页面</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --border: #1f2937;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 40px 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .wrapper {
+      max-width: 900px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+    .header h1 { font-size: 22px; font-weight: 600; color: #fff; }
+    .header p { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+    .form-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .form-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-item.full-width {
+      grid-column: span 2;
+    }
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #e5e7eb;
+    }
+    input[type="text"], input[type="email"], input[type="tel"], input[type="password"], input[type="number"], select, textarea {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      color: #fff;
+      padding: 9px 12px;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding-top: 6px;
+    }
+    .checkbox-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    .state-monitor {
+      background: #030712;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+    }
+    .state-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #60a5fa;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      color: #34d399;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <h1>高校企业级业务表单 (自动化填充模拟验证环境)</h1>
+      <p>页面已集成响应式事件侦听器，当表单数据被扩展填充时，下方将实时输出被更新的状态值。</p>
+    </div>
+
+    <form id="test-form" class="form-container">
+      <div class="form-item">
+        <label for="contact-name">经办人姓名</label>
+        <input type="text" id="contact-name" name="contactName" placeholder="请输入经办人真实姓名">
+      </div>
+
+      <div class="form-item">
+        <label for="user-phone">联系手机号码</label>
+        <input type="tel" id="user-phone" name="mobile" placeholder="请输入11位有效手机号码">
+      </div>
+
+      <div class="form-item">
+        <label for="id-card">公民身份证号 (校验位精准计算)</label>
+        <input type="text" id="id-card" name="idCardNo" placeholder="请输入18位二代身份证号">
+      </div>
+
+      <div class="form-item">
+        <label for="usci-code">统一社会信用代码 / 税号</label>
+        <input type="text" id="usci-code" name="usci" placeholder="请输入18位组织机构统一社会信用代码">
+      </div>
+
+      <div class="form-item">
+        <label for="company-name">收款单位 / 企业全称</label>
+        <input type="text" id="company-name" name="companyName" placeholder="请输入公司或机构全称">
+      </div>
+
+      <div class="form-item">
+        <label for="bank-card">银行卡号 (对公/个人账号)</label>
+        <input type="text" id="bank-card" name="bankCardNo" placeholder="请输入银行卡号">
+      </div>
+
+      <div class="form-item">
+        <label for="apply-amount">报销 / 申请金额 (元)</label>
+        <input type="number" id="apply-amount" name="amount" placeholder="输入金额">
+      </div>
+
+      <div class="form-item">
+        <label for="user-email">电子对账邮箱</label>
+        <input type="email" id="user-email" name="email" placeholder="example@domain.com">
+      </div>
+
+      <div class="form-item">
+        <label for="busi-date">业务发生日期</label>
+        <input type="text" id="busi-date" name="busiDate" placeholder="yyyy-MM-dd">
+      </div>
+
+      <div class="form-item">
+        <label for="dept-select">归属部门</label>
+        <select id="dept-select" name="department">
+          <option value="">-- 请选择所属部门 --</option>
+          <option value="dept_fin">财务与资产管理处</option>
+          <option value="dept_sci">科学技术发展研究院</option>
+          <option value="dept_edu">教务部与研究生院</option>
+          <option value="dept_it">信息化与网络中心</option>
+        </select>
+      </div>
+
+      <div class="form-item full-width">
+        <label for="delivery-addr">详细地址</label>
+        <input type="text" id="delivery-addr" name="address" placeholder="省市区路号">
+      </div>
+
+      <div class="form-item full-width">
+        <label for="memo">业务摘要与审核备注</label>
+        <textarea id="memo" name="remark" rows="3" placeholder="请输入业务详细说明或测试用例备注"></textarea>
+      </div>
+
+      <div class="form-item full-width">
+        <label>流程状态与属性确认</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label"><input type="checkbox" name="urgent"> 加急审核单</label>
+          <label class="checkbox-label"><input type="checkbox" name="taxInvoice" checked> 包含增值税专用发票</label>
+          <label class="checkbox-label"><input type="checkbox" name="auditPass"> 预审校验通过</label>
+        </div>
+      </div>
+    </form>
+
+    <div class="state-monitor">
+      <div class="state-title">FRAMEWORK REACTIVE STATE (实时响应式捕获)</div>
+      <pre id="state-output">等待输入或扩展填充触发...</pre>
+    </div>
+  </div>
+
+  <script>
+    // 模拟 Vue / React 的响应式模型监听
+    const form = document.getElementById('test-form');
+    const stateOutput = document.getElementById('state-output');
+
+    function syncState() {
+      const formData = new FormData(form);
+      const obj = {};
+      formData.forEach((val, key) => {
+        obj[key] = val;
+      });
+      stateOutput.textContent = JSON.stringify(obj, null, 2);
+    }
+
+    form.addEventListener('input', syncState);
+    form.addEventListener('change', syncState);
+    syncState();
+  </script>
+</body>
+</html>

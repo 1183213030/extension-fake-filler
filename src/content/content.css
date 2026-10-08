@@ -1,0 +1,19 @@
+/* 宿主页面高亮动画注入样式 */
+.fake-filler-pulse {
+  animation: fakeFillerPulseAnim 1.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 1px !important;
+  transition: all 0.25s ease !important;
+}
+
+@keyframes fakeFillerPulseAnim {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}

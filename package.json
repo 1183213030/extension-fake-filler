@@ -1,0 +1,9 @@
+{
+  "name": "fakecraft-extension",
+  "version": "1.0.0",
+  "description": "Chrome and Edge extension for generating test data and auto-filling forms",
+  "type": "module",
+  "scripts": {
+    "test": "node test/run-tests.js"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "FakeCraft - 智能测试数据生成与填充器",
+  "version": "1.0.0",
+  "description": "专为开发者与测试人员设计的虚拟数据生成与一键填充工具，支持合规身份证、统一社会信用代码、手机号、银行卡及常见业务字段智能识别填充，兼容 Vue/React 响应式系统。",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "FakeCraft 数据生成器",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content-bundle.js"],
+      "css": ["src/content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/content-bundle.js",
+        "src/content/content.css",
+        "icons/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "contextMenus",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "commands": {
+    "fill-all": {
+      "suggested_key": {
+        "default": "Alt+Shift+F"
+      },
+      "description": "一键智能填充当前页面所有表单字段"
+    },
+    "clear-all": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      },
+      "description": "一键清空当前页面表单字段"
+    }
+  }
+}
